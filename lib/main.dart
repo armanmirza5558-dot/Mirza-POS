@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'database/db_helper.dart';
+import 'screens/stock_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await DBHelper.database; // Database initialize ho raha hai
+  await DBHelper.database;
   runApp(const MyApp());
 }
 
@@ -36,7 +37,7 @@ class _HomePageState extends State<HomePage> {
 
   static const List<Widget> _pages = <Widget>[
     BillingScreen(),
-    Center(child: Text('Stock Management - Coming Soon')),
+    StockScreen(), // Stock screen yahan add hai
     Center(child: Text('Ledger - Coming Soon')),
     Center(child: Text('Expense - Coming Soon')),
     Center(child: Text('Reports - Coming Soon')),
@@ -72,7 +73,6 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// ---------------- BILLING SCREEN ----------------
 class BillingScreen extends StatefulWidget {
   const BillingScreen({super.key});
 
@@ -96,8 +96,6 @@ class _BillingScreenState extends State<BillingScreen> {
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
-          
-          // Customer Details Form
           Card(
             elevation: 2,
             child: Padding(
@@ -126,21 +124,18 @@ class _BillingScreenState extends State<BillingScreen> {
               ),
             ),
           ),
-          
           const SizedBox(height: 20),
-          
-          // Dummy Button to show next step
           SizedBox(
             width: double.infinity,
             height: 50,
             child: ElevatedButton.icon(
               onPressed: () {
                  ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Database ready! Next step: Add Products.')),
+                  const SnackBar(content: Text('Next: Billing items selection')),
                 );
               },
               icon: const Icon(Icons.add_shopping_cart),
-              label: const Text('Add Products (Next Step)', style: TextStyle(fontSize: 16)),
+              label: const Text('Add Products to Bill', style: TextStyle(fontSize: 16)),
             ),
           ),
         ],
