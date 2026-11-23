@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'database/db_helper.dart';
 import 'screens/stock_screen.dart';
+import 'models/product.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,10 +36,9 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
 
-  // Stock screen ab add ho gayi hai
   static const List<Widget> _pages = <Widget>[
     BillingScreen(),
-    StockScreen(), // <--- Yeh add kiya
+    StockScreen(),
     Center(child: Text('Ledger - Coming Soon')),
     Center(child: Text('Expense - Coming Soon')),
     Center(child: Text('Reports - Coming Soon')),
@@ -74,6 +74,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+// ---------------- BILLING SCREEN ----------------
 class BillingScreen extends StatefulWidget {
   const BillingScreen({super.key});
 
@@ -85,6 +86,94 @@ class _BillingScreenState extends State<BillingScreen> {
   final _customerNameController = TextEditingController();
   final _customerPhoneController = TextEditingController();
   
+  // Bill items store karne ke liye
+  List<Map<String, dynamic>> _cartItems = [];
+  List<Product> _availableProducts = [];
+  
+  double _grandTotal = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProductsForBilling();
+  }
+
+  void _loadProductsForBilling() async {
+    final products = await DBHelper.getProducts();
+    setState(() {
+      _availableProducts = products;
+    });
+  }
+
+  void _addProductToCart(Product product) {
+    setState(() {
+      // Check if product already in cart
+      int index = _cartItems.indexWhere((item) => item['product'].id == product.id);
+      if (index >= 0) {
+        _cartItems[index]['qty'] += 1;
+      } else {
+        _cartItems.add({
+          'product': product,
+          'qty': 1,
+        });
+      }
+      _calculateTotal();
+    });
+  }
+
+  void _calculateTotal() {
+    double total = 0;
+    for (var item in _cartItems) {
+      total += (item['product'].salePrice * item['qty']);
+    }
+    setState(() {
+      _grandTotal = total;
+    });
+  }
+
+  void _showProductSelectionDialog() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return Container(
+          height: 400,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Select Product', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Divider(),
+              Expanded(
+                child: _availableProducts.isEmpty
+                    ? const Center(child: Text('No products available. Add stock first.'))
+                    : ListView.builder(
+                        itemCount: _availableProducts.length,
+                        itemBuilder: (context, index) {
+                          final p = _availableProducts[index];
+                          return ListTile(
+                            title: Text(p.name),
+                            subtitle: Text('Price: Rs ${p.salePrice} | Stock: ${p.stockQty}'),
+                            onTap: () {
+                              if (p.stockQty > 0) {
+                                _addProductToCart(p);
+                                Navigator.pop(context);
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Out of stock!')),
+                                );
+                              }
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -92,11 +181,7 @@ class _BillingScreenState extends State<BillingScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'New Invoice',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
+          // Customer Details Form
           Card(
             elevation: 2,
             child: Padding(
@@ -106,7 +191,7 @@ class _BillingScreenState extends State<BillingScreen> {
                   TextField(
                     controller: _customerNameController,
                     decoration: const InputDecoration(
-                      labelText: 'Customer Name',
+                      labelText: 'Customer Name (Optional)',
                       prefixIcon: Icon(Icons.person),
                       border: OutlineInputBorder(),
                     ),
@@ -116,7 +201,7 @@ class _BillingScreenState extends State<BillingScreen> {
                     controller: _customerPhoneController,
                     keyboardType: TextInputType.phone,
                     decoration: const InputDecoration(
-                      labelText: 'Mobile Number',
+                      labelText: 'Mobile Number (Optional)',
                       prefixIcon: Icon(Icons.phone),
                       border: OutlineInputBorder(),
                     ),
@@ -125,18 +210,81 @@ class _BillingScreenState extends State<BillingScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 20),
+          
+          const SizedBox(height: 16),
+          
+          // Add Product Button
           SizedBox(
             width: double.infinity,
-            height: 50,
             child: ElevatedButton.icon(
-              onPressed: () {
-                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Next: Billing items selection')),
-                );
-              },
+              onPressed: _showProductSelectionDialog,
               icon: const Icon(Icons.add_shopping_cart),
-              label: const Text('Add Products to Bill', style: TextStyle(fontSize: 16)),
+              label: const Text('Add Product to Bill', style: TextStyle(fontSize: 16)),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Cart Items List
+          Expanded(
+            child: _cartItems.isEmpty
+                ? const Center(child: Text('No items in bill'))
+                : ListView.builder(
+                    itemCount: _cartItems.length,
+                    itemBuilder: (context, index) {
+                      final item = _cartItems[index];
+                      final p = item['product'] as Product;
+                      final qty = item['qty'] as int;
+                      return Card(
+                        child: ListTile(
+                          title: Text(p.name),
+                          subtitle: Text('Qty: $qty x Rs ${p.salePrice}'),
+                          trailing: Text(
+                            'Rs ${p.salePrice * qty}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          
+          // Grand Total & Save Button
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Grand Total:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text('Rs $_grandTotal', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _cartItems.isEmpty ? null : () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Invoice Save ka function agla step hai!')),
+                      );
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.all(12.0),
+                      child: Text('Save Invoice', style: TextStyle(fontSize: 18)),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
