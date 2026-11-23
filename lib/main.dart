@@ -35,9 +35,10 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
 
+  // Stock screen ab add ho gayi hai
   static const List<Widget> _pages = <Widget>[
     BillingScreen(),
-    StockScreen(), // Stock screen yahan add hai
+    StockScreen(), // <--- Yeh add kiya
     Center(child: Text('Ledger - Coming Soon')),
     Center(child: Text('Expense - Coming Soon')),
     Center(child: Text('Reports - Coming Soon')),
