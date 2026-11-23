@@ -41,32 +41,37 @@ class _StockScreenState extends State<StockScreen> {
                   itemBuilder: (context, index) {
                     final p = _products[index];
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: ListTile(
-                        title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('Category: ${p.category} | Stock: ${p.stockQty}'),
-                        trailing: Text(
-                          'Rs ${p.salePrice}',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          // Add screen par jao
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const AddProductScreen()),
-          );
-          // Agar product save hua to list wapas load karo
-          if (result == true) {
-            _loadProducts();
-          }
-        },
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
+  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+  child: Padding(
+    padding: const EdgeInsets.all(12.0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              p.name,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            Text(
+              'Rs ${p.salePrice}',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text('Category: ${p.category}'),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Purchase: Rs ${p.purchasePrice}', style: const TextStyle(color: Colors.grey)),
+            Text('Stock: ${p.stockQty}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+          ],
+        ),
+      ],
+    ),
+  ),
+);
 }
