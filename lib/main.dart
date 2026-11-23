@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'database/db_helper.dart';
 import 'screens/stock_screen.dart';
 import 'models/product.dart';
-import 'package:barcode_scan2/barcode_scan2.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -100,11 +99,12 @@ class _BillingScreenState extends State<BillingScreen> {
     super.initState();
     _loadProductsForBilling();
     
+    // Search bar mein type karne par list filter hogi
     _searchController.addListener(() {
       filterProducts(_searchController.text);
     });
     
-    // Jab amount receive ho to return amount calculate ho
+    // Amount receive hone par return amount calculate hoga
     _receivedAmountController.addListener(() {
       setState(() {});
     });
@@ -156,22 +156,8 @@ class _BillingScreenState extends State<BillingScreen> {
     });
   }
 
-  Future<void> _scanBarcode() async {
-    try {
-      var result = await BarcodeScanner.scan();
-      if (result.rawContent.isNotEmpty) {
-        filterProducts(result.rawContent);
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Scan error: $e')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Return amount calculation
     double received = double.tryParse(_receivedAmountController.text) ?? 0.0;
     double returnAmount = received > _grandTotal ? received - _grandTotal : 0.0;
 
@@ -179,7 +165,7 @@ class _BillingScreenState extends State<BillingScreen> {
       padding: const EdgeInsets.all(12.0),
       child: Column(
         children: [
-          // 1. COMPACT CUSTOMER DETAILS
+          // 1. CUSTOMER DETAILS (Compact)
           Row(
             children: [
               Expanded(
@@ -219,7 +205,7 @@ class _BillingScreenState extends State<BillingScreen> {
           
           const SizedBox(height: 12),
           
-          // 2. SEARCH & SCAN
+          // 2. SEARCH BAR
           Row(
             children: [
               Expanded(
@@ -228,7 +214,7 @@ class _BillingScreenState extends State<BillingScreen> {
                   child: TextField(
                     controller: _searchController,
                     decoration: const InputDecoration(
-                      hintText: 'Search Product by Name...',
+                      hintText: 'Search Product...',
                       prefixIcon: Icon(Icons.search),
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
@@ -236,24 +222,10 @@ class _BillingScreenState extends State<BillingScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              SizedBox(
-                height: 45,
-                width: 45,
-                child: IconButton(
-                  icon: const Icon(Icons.qr_code_scanner, size: 24),
-                  onPressed: _scanBarcode,
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                  ),
-                ),
-              ),
             ],
           ),
 
-          // Dynamic Dropdown for Search
+          // Dynamic Search Dropdown
           if (_filteredProducts.isNotEmpty && _searchController.text.isNotEmpty)
             Container(
               constraints: const BoxConstraints(maxHeight: 150),
@@ -288,7 +260,7 @@ class _BillingScreenState extends State<BillingScreen> {
           
           const SizedBox(height: 8),
           
-          // 3. CART ITEMS LIST (Bada area)
+          // 3. CART ITEMS LIST
           Expanded(
             child: _cartItems.isEmpty
                 ? const Center(
@@ -348,7 +320,6 @@ class _BillingScreenState extends State<BillingScreen> {
                   ],
                 ),
                 const Divider(),
-                // Amount Received & Return
                 Row(
                   children: [
                     Expanded(
