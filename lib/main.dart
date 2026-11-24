@@ -33,6 +33,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
+  int _heldBillsCount = 0; // Hold bills ki counting ke liye
 
   static const List<Widget> _pages = <Widget>[
     BillingScreen(),
@@ -43,6 +44,22 @@ class _HomePageState extends State<HomePage> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _updateHeldBillsCount();
+  }
+
+  void _updateHeldBillsCount() async {
+    final db = await DBHelper.database;
+    final result = await db.rawQuery('SELECT COUNT(*) as count FROM held_bills');
+    if (mounted) {
+      setState(() {
+        _heldBillsCount = result.first['count'] as int;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -50,17 +67,44 @@ class _HomePageState extends State<HomePage> {
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
-          // Receipt Holding Icon
-          IconButton(
-            icon: const Icon(Icons.playlist_add_check),
-            tooltip: 'Held Bills',
-            onPressed: () {
-              // Held bills ka page kholne ka function
-            },
-          )
+          // Receipt Holding Icon with Counter
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.playlist_add_check, size: 28),
+                tooltip: 'Held Bills',
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const HeldBillsScreen()),
+                  );
+                  _updateHeldBillsCount(); // Wapas aane par count update karein
+                },
+              ),
+              if (_heldBillsCount > 0)
+                Positioned(
+                  right: 4,
+                  top: 4,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '$_heldBillsCount',
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
-      body: _pages[_selectedIndex],
+      // Yahan BillingScreen ko pass kiya hai taake hold ke baad count update ho
+      body: _selectedIndex == 0 
+          ? BillingScreen(onBillHeld: _updateHeldBillsCount) 
+          : _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         type: BottomNavigationBarType.fixed,
@@ -80,7 +124,8 @@ class _HomePageState extends State<HomePage> {
 
 // ---------------- BILLING SCREEN ----------------
 class BillingScreen extends StatefulWidget {
-  const BillingScreen({super.key});
+  final VoidCallback onBillHeld;
+  const BillingScreen({super.key, required this.onBillHeld});
 
   @override
   State<BillingScreen> createState() => _BillingScreenState();
@@ -91,6 +136,7 @@ class _BillingScreenState extends State<BillingScreen> {
   final _customerPhoneController = TextEditingController();
   final _searchController = TextEditingController();
   final _receivedAmountController = TextEditingController();
+  final _noteController = TextEditingController();
 
   List<Product> _allProducts = [];
   List<Product> _filteredProducts = [];
@@ -98,7 +144,7 @@ class _BillingScreenState extends State<BillingScreen> {
   
   double _grandTotal = 0.0;
   bool _isReturnMode = false;
-  String _paymentMode = 'Cash'; // Cash ya Credit
+  String _paymentMode = 'Cash';
 
   @override
   void initState() {
@@ -142,18 +188,13 @@ class _BillingScreenState extends State<BillingScreen> {
     });
   }
 
-  // Price Edit
   void _editPrice(int index) {
     TextEditingController priceController = TextEditingController(text: _cartItems[index]['product'].salePrice.toString());
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Edit Price'),
-        content: TextField(
-          controller: priceController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'New Price', prefixText: 'Rs '),
-        ),
+        content: TextField(controller: priceController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'New Price', prefixText: 'Rs ')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
@@ -162,9 +203,7 @@ class _BillingScreenState extends State<BillingScreen> {
               if (newPrice != null) {
                 setState(() {
                   Product p = _cartItems[index]['product'];
-                  _cartItems[index]['product'] = Product(
-                    id: p.id, name: p.name, category: p.category, purchasePrice: p.purchasePrice, salePrice: newPrice, stockQty: p.stockQty,
-                  );
+                  _cartItems[index]['product'] = Product(id: p.id, name: p.name, category: p.category, purchasePrice: p.purchasePrice, salePrice: newPrice, stockQty: p.stockQty);
                   _calculateTotal();
                 });
               }
@@ -177,28 +216,20 @@ class _BillingScreenState extends State<BillingScreen> {
     );
   }
 
-  // Quantity Edit
   void _editQty(int index) {
     TextEditingController qtyController = TextEditingController(text: _cartItems[index]['qty'].toString());
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Edit Quantity'),
-        content: TextField(
-          controller: qtyController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'New Qty'),
-        ),
+        content: TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'New Qty')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
               int? newQty = int.tryParse(qtyController.text);
               if (newQty != null && newQty != 0) {
-                setState(() {
-                  _cartItems[index]['qty'] = newQty;
-                  _calculateTotal();
-                });
+                setState(() { _cartItems[index]['qty'] = newQty; _calculateTotal(); });
               }
               Navigator.pop(context);
             },
@@ -209,28 +240,20 @@ class _BillingScreenState extends State<BillingScreen> {
     );
   }
 
-  // Discount Edit
   void _editDiscount(int index) {
     TextEditingController discController = TextEditingController(text: _cartItems[index]['discount'].toString());
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Item Discount (Rs)'),
-        content: TextField(
-          controller: discController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Discount Amount', prefixText: 'Rs '),
-        ),
+        content: TextField(controller: discController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Discount Amount', prefixText: 'Rs ')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
               double? disc = double.tryParse(discController.text);
               if (disc != null) {
-                setState(() {
-                  _cartItems[index]['discount'] = disc;
-                  _calculateTotal();
-                });
+                setState(() { _cartItems[index]['discount'] = disc; _calculateTotal(); });
               }
               Navigator.pop(context);
             },
@@ -250,7 +273,6 @@ class _BillingScreenState extends State<BillingScreen> {
     setState(() => _grandTotal = total);
   }
 
-  // Hold Bill Function
   void _holdBill() async {
     if (_cartItems.isEmpty) return;
     final db = await DBHelper.database;
@@ -273,8 +295,30 @@ class _BillingScreenState extends State<BillingScreen> {
       _customerPhoneController.clear();
       _grandTotal = 0;
       _receivedAmountController.clear();
+      _noteController.clear();
     });
+    
+    widget.onBillHeld(); // Header par count update karein
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill Held Successfully!')));
+  }
+
+  // Hold Bill Load Karne ka Function
+  void _loadHeldBillData(Map<String, dynamic> heldBillData) {
+    setState(() {
+      _customerNameController.text = heldBillData['customer_name'];
+      _customerPhoneController.text = heldBillData['customer_phone'];
+      
+      List<dynamic> decodedCart = jsonDecode(heldBillData['cart_data']);
+      _cartItems = decodedCart.map((item) {
+        return {
+          'product': Product.fromMap(item['product']),
+          'qty': item['qty'],
+          'discount': item['discount'],
+        };
+      }).toList();
+      
+      _calculateTotal();
+    });
   }
 
   @override
@@ -286,7 +330,7 @@ class _BillingScreenState extends State<BillingScreen> {
       padding: const EdgeInsets.all(8.0),
       child: Column(
         children: [
-          // Customer Details Row
+          // Customer Details
           Row(
             children: [
               Expanded(
@@ -372,7 +416,7 @@ class _BillingScreenState extends State<BillingScreen> {
           
           const SizedBox(height: 6),
           
-          // Bill Items Table (Headers)
+          // Bill Items Table Headers
           Container(
             color: Colors.grey.shade200,
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
@@ -407,22 +451,10 @@ class _BillingScreenState extends State<BillingScreen> {
                           child: Row(
                             children: [
                               Expanded(flex: 3, child: Text(p.name, style: const TextStyle(fontSize: 12))),
-                              Expanded(
-                                flex: 2,
-                                child: InkWell(onTap: () => _editPrice(index), child: Text('${p.salePrice}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.blue, decoration: TextDecoration.underline))),
-                              ),
-                              Expanded(
-                                flex: 1,
-                                child: InkWell(onTap: () => _editQty(index), child: Text('$qty', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.blue, decoration: TextDecoration.underline, fontWeight: qty < 0 ? FontWeight.bold : FontWeight.normal))),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: InkWell(onTap: () => _editDiscount(index), child: Text('$disc', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.blue, decoration: TextDecoration.underline))),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Text('$total', textAlign: TextAlign.right, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: total < 0 ? Colors.red : Colors.black)),
-                              ),
+                              Expanded(flex: 2, child: InkWell(onTap: () => _editPrice(index), child: Text('${p.salePrice}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.blue, decoration: TextDecoration.underline)))),
+                              Expanded(flex: 1, child: InkWell(onTap: () => _editQty(index), child: Text('$qty', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.blue, decoration: TextDecoration.underline, fontWeight: qty < 0 ? FontWeight.bold : FontWeight.normal)))),
+                              Expanded(flex: 2, child: InkWell(onTap: () => _editDiscount(index), child: Text('$disc', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.blue, decoration: TextDecoration.underline)))),
+                              Expanded(flex: 2, child: Text('$total', textAlign: TextAlign.right, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: total < 0 ? Colors.red : Colors.black))),
                               IconButton(
                                 icon: const Icon(Icons.delete, color: Colors.red, size: 16),
                                 padding: EdgeInsets.zero,
@@ -437,6 +469,22 @@ class _BillingScreenState extends State<BillingScreen> {
                   ),
           ),
           
+          // Bill Note
+          SizedBox(
+            height: 35,
+            child: TextField(
+              controller: _noteController,
+              decoration: const InputDecoration(
+                hintText: 'Add Note / Comment for this bill...',
+                prefixIcon: Icon(Icons.note, size: 16),
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+              ),
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+          const SizedBox(height: 4),
+
           // Bottom Checkout Section
           Container(
             padding: const EdgeInsets.all(8),
@@ -450,18 +498,8 @@ class _BillingScreenState extends State<BillingScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    Row(
-                      children: [
-                        Radio<String>(value: 'Cash', groupValue: _paymentMode, onChanged: (val) => setState(() => _paymentMode = val!)),
-                        const Text('Cash', style: TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Radio<String>(value: 'Credit', groupValue: _paymentMode, onChanged: (val) => setState(() => _paymentMode = val!)),
-                        const Text('Credit (Udhaar)', style: TextStyle(fontSize: 12)),
-                      ],
-                    ),
+                    Row(children: [Radio<String>(value: 'Cash', groupValue: _paymentMode, onChanged: (val) => setState(() => _paymentMode = val!)), const Text('Cash', style: TextStyle(fontSize: 12))]),
+                    Row(children: [Radio<String>(value: 'Credit', groupValue: _paymentMode, onChanged: (val) => setState(() => _paymentMode = val!)), const Text('Credit (Udhaar)', style: TextStyle(fontSize: 12))]),
                   ],
                 ),
                 const Divider(height: 4),
@@ -523,6 +561,73 @@ class _BillingScreenState extends State<BillingScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------- HELD BILLS SCREEN ----------------
+class HeldBillsScreen extends StatefulWidget {
+  const HeldBillsScreen({super.key});
+
+  @override
+  State<HeldBillsScreen> createState() => _HeldBillsScreenState();
+}
+
+class _HeldBillsScreenState extends State<HeldBillsScreen> {
+  List<Map<String, dynamic>> _heldBills = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHeldBills();
+  }
+
+  void _loadHeldBills() async {
+    final db = await DBHelper.database;
+    final result = await db.query('held_bills', orderBy: 'id DESC');
+    setState(() {
+      _heldBills = result;
+      _isLoading = false;
+    });
+  }
+
+  void _resumeBill(Map<String, dynamic> bill) async {
+    // Bill load karein aur wapas jayen
+    Navigator.pop(context, bill); 
+    // Delete hold bill from DB as it is now active
+    final db = await DBHelper.database;
+    await db.delete('held_bills', where: 'id = ?', whereArgs: [bill['id']]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Held Bills / Receipts')),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _heldBills.isEmpty
+              ? const Center(child: Text('No held bills found.'))
+              : ListView.builder(
+                  itemCount: _heldBills.length,
+                  itemBuilder: (context, index) {
+                    final bill = _heldBills[index];
+                    return Card(
+                      margin: const EdgeInsets.all(8),
+                      child: ListTile(
+                        leading: const Icon(Icons.receipt, color: Colors.orange),
+                        title: Text(bill['customer_name'].isEmpty ? 'Walk-in Customer' : bill['customer_name']),
+                        subtitle: Text('Phone: ${bill['customer_phone']}\nDate: ${bill['date'].substring(0, 16)}'),
+                        isThreeLine: true,
+                        trailing: ElevatedButton(
+                          onPressed: () => _resumeBill(bill),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                          child: const Text('RESUME', style: TextStyle(color: Colors.white)),
+                        ),
+                      ),
+                    );
+                  },
+                ),
     );
   }
 }
