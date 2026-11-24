@@ -36,7 +36,6 @@ class _HomePageState extends State<HomePage> {
   int _heldBillsCount = 0; // Hold bills ki counting ke liye
 
   static const List<Widget> _pages = <Widget>[
-    BillingScreen(),
     StockScreen(),
     Center(child: Text('Ledger - Coming Soon')),
     Center(child: Text('Expense - Coming Soon')),
@@ -103,8 +102,8 @@ class _HomePageState extends State<HomePage> {
       ),
       // Yahan BillingScreen ko pass kiya hai taake hold ke baad count update ho
       body: _selectedIndex == 0 
-          ? BillingScreen(onBillHeld: _updateHeldBillsCount) 
-          : _pages[_selectedIndex],
+    ? BillingScreen(onBillHeld: _updateHeldBillsCount) 
+    : _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         type: BottomNavigationBarType.fixed,
