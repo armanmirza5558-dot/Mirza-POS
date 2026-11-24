@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'database/db_helper.dart';
 import 'screens/stock_screen.dart';
@@ -17,10 +18,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'My POS',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-      ),
+      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
       home: const HomePage(),
     );
   }
@@ -48,20 +46,26 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Shop POS'),
+        title: const Text('Candela Style POS'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
+        actions: [
+          // Receipt Holding Icon
+          IconButton(
+            icon: const Icon(Icons.playlist_add_check),
+            tooltip: 'Held Bills',
+            onPressed: () {
+              // Held bills ka page kholne ka function
+            },
+          )
+        ],
       ),
       body: _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         type: BottomNavigationBarType.fixed,
         selectedItemColor: Colors.blue,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+        onTap: (index) => setState(() => _selectedIndex = index),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Billing'),
           BottomNavigationBarItem(icon: Icon(Icons.inventory), label: 'Stock'),
@@ -74,7 +78,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// ---------------- BILLING SCREEN (Candela Style) ----------------
+// ---------------- BILLING SCREEN ----------------
 class BillingScreen extends StatefulWidget {
   const BillingScreen({super.key});
 
@@ -93,20 +97,15 @@ class _BillingScreenState extends State<BillingScreen> {
   List<Map<String, dynamic>> _cartItems = [];
   
   double _grandTotal = 0.0;
-  bool _isReturnMode = false; // Return Mode ka toggle
+  bool _isReturnMode = false;
+  String _paymentMode = 'Cash'; // Cash ya Credit
 
   @override
   void initState() {
     super.initState();
     _loadProducts();
-    
-    _searchController.addListener(() {
-      filterProducts(_searchController.text);
-    });
-    
-    _receivedAmountController.addListener(() {
-      setState(() {});
-    });
+    _searchController.addListener(() => filterProducts(_searchController.text));
+    _receivedAmountController.addListener(() => setState(() {}));
   }
 
   void _loadProducts() async {
@@ -122,183 +121,223 @@ class _BillingScreenState extends State<BillingScreen> {
       setState(() => _filteredProducts = []);
     } else {
       setState(() {
-        _filteredProducts = _allProducts
-            .where((p) => p.name.toLowerCase().contains(query.toLowerCase()))
-            .toList();
+        _filteredProducts = _allProducts.where((p) => p.name.toLowerCase().contains(query.toLowerCase())).toList();
       });
     }
   }
 
   void _addProductToCart(Product product) {
     setState(() {
-      // Agar return mode on hai to quantity minus mein jayegi
       int qtyToAdd = _isReturnMode ? -1 : 1;
-      
       int index = _cartItems.indexWhere((item) => item['product'].id == product.id);
       if (index >= 0) {
         _cartItems[index]['qty'] += qtyToAdd;
-        // Agar qty 0 ho jaye to item hata dein
-        if (_cartItems[index]['qty'] == 0) {
-          _cartItems.removeAt(index);
-        }
+        if (_cartItems[index]['qty'] == 0) _cartItems.removeAt(index);
       } else {
-        _cartItems.add({'product': product, 'qty': qtyToAdd});
+        _cartItems.add({'product': product, 'qty': qtyToAdd, 'discount': 0.0});
       }
-      
       _calculateTotal();
       _searchController.clear();
       _filteredProducts = [];
     });
   }
 
-  // Price Edit karne ka function
+  // Price Edit
   void _editPrice(int index) {
-    TextEditingController priceController = TextEditingController(
-      text: _cartItems[index]['product'].salePrice.toString()
-    );
-
+    TextEditingController priceController = TextEditingController(text: _cartItems[index]['product'].salePrice.toString());
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Edit Price'),
-          content: TextField(
-            controller: priceController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'New Price', prefixText: 'Rs '),
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Price'),
+        content: TextField(
+          controller: priceController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'New Price', prefixText: 'Rs '),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              double? newPrice = double.tryParse(priceController.text);
+              if (newPrice != null) {
+                setState(() {
+                  Product p = _cartItems[index]['product'];
+                  _cartItems[index]['product'] = Product(
+                    id: p.id, name: p.name, category: p.category, purchasePrice: p.purchasePrice, salePrice: newPrice, stockQty: p.stockQty,
+                  );
+                  _calculateTotal();
+                });
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                double? newPrice = double.tryParse(priceController.text);
-                if (newPrice != null) {
-                  setState(() {
-                    // Product ki copy banakar price update karein
-                    Product updatedProduct = Product(
-                      id: _cartItems[index]['product'].id,
-                      name: _cartItems[index]['product'].name,
-                      category: _cartItems[index]['product'].category,
-                      purchasePrice: _cartItems[index]['product'].purchasePrice,
-                      salePrice: newPrice,
-                      stockQty: _cartItems[index]['product'].stockQty,
-                    );
-                    _cartItems[index]['product'] = updatedProduct;
-                    _calculateTotal();
-                  });
-                }
-                Navigator.pop(context);
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
+    );
+  }
+
+  // Quantity Edit
+  void _editQty(int index) {
+    TextEditingController qtyController = TextEditingController(text: _cartItems[index]['qty'].toString());
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Quantity'),
+        content: TextField(
+          controller: qtyController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'New Qty'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              int? newQty = int.tryParse(qtyController.text);
+              if (newQty != null && newQty != 0) {
+                setState(() {
+                  _cartItems[index]['qty'] = newQty;
+                  _calculateTotal();
+                });
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Discount Edit
+  void _editDiscount(int index) {
+    TextEditingController discController = TextEditingController(text: _cartItems[index]['discount'].toString());
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Item Discount (Rs)'),
+        content: TextField(
+          controller: discController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Discount Amount', prefixText: 'Rs '),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              double? disc = double.tryParse(discController.text);
+              if (disc != null) {
+                setState(() {
+                  _cartItems[index]['discount'] = disc;
+                  _calculateTotal();
+                });
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
     );
   }
 
   void _calculateTotal() {
     double total = 0;
     for (var item in _cartItems) {
-      total += (item['product'].salePrice * item['qty']);
+      double itemTotal = (item['product'].salePrice * item['qty']) - (item['discount'] * item['qty']);
+      total += itemTotal;
     }
-    setState(() {
-      _grandTotal = total;
+    setState(() => _grandTotal = total);
+  }
+
+  // Hold Bill Function
+  void _holdBill() async {
+    if (_cartItems.isEmpty) return;
+    final db = await DBHelper.database;
+    String cartJson = jsonEncode(_cartItems.map((e) => {
+      'product': (e['product'] as Product).toMap(),
+      'qty': e['qty'],
+      'discount': e['discount']
+    }).toList());
+
+    await db.insert('held_bills', {
+      'customer_name': _customerNameController.text,
+      'customer_phone': _customerPhoneController.text,
+      'cart_data': cartJson,
+      'date': DateTime.now().toString(),
     });
+
+    setState(() {
+      _cartItems.clear();
+      _customerNameController.clear();
+      _customerPhoneController.clear();
+      _grandTotal = 0;
+      _receivedAmountController.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill Held Successfully!')));
   }
 
   @override
   Widget build(BuildContext context) {
     double received = double.tryParse(_receivedAmountController.text) ?? 0.0;
-    
-    // Agar Total minus mein hai (yani customer ko paise wapas dene hain)
-    double returnAmount = 0.0;
-    if (_grandTotal < 0) {
-       returnAmount = _grandTotal.abs();
-    } else if (received > _grandTotal) {
-       returnAmount = received - _grandTotal;
-    }
+    double returnAmount = (_grandTotal < 0) ? _grandTotal.abs() : (received > _grandTotal ? received - _grandTotal : 0.0);
 
     return Padding(
-      padding: const EdgeInsets.all(12.0),
+      padding: const EdgeInsets.all(8.0),
       child: Column(
         children: [
-          // 1. CUSTOMER DETAILS (Compact)
+          // Customer Details Row
           Row(
             children: [
               Expanded(
                 flex: 3,
                 child: SizedBox(
-                  height: 45,
+                  height: 40,
                   child: TextField(
                     controller: _customerNameController,
-                    decoration: const InputDecoration(
-                      hintText: 'Customer Name',
-                      prefixIcon: Icon(Icons.person, size: 20),
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                    ),
+                    decoration: const InputDecoration(hintText: 'Customer Name', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8)),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
               Expanded(
                 flex: 2,
                 child: SizedBox(
-                  height: 45,
+                  height: 40,
                   child: TextField(
                     controller: _customerPhoneController,
                     keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      hintText: 'Phone',
-                      prefixIcon: Icon(Icons.phone, size: 20),
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                    ),
+                    decoration: const InputDecoration(hintText: 'Phone', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8)),
                   ),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 6),
           
-          const SizedBox(height: 8),
-          
-          // 2. SEARCH & RETURN MODE ROW
+          // Search Bar & Return Button
           Row(
             children: [
               Expanded(
                 child: SizedBox(
-                  height: 45,
+                  height: 40,
                   child: TextField(
                     controller: _searchController,
-                    decoration: const InputDecoration(
-                      hintText: 'Search product...',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                    ),
+                    decoration: const InputDecoration(hintText: 'Search Product...', prefixIcon: Icon(Icons.search, size: 20), border: OutlineInputBorder(), contentPadding: EdgeInsets.zero),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              // RETURN BUTTON (Candela Style)
+              const SizedBox(width: 4),
               SizedBox(
-                height: 45,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _isReturnMode = !_isReturnMode;
-                    });
-                  },
-                  icon: Icon(_isReturnMode ? Icons.cancel : Icons.assignment_return),
-                  label: Text(_isReturnMode ? 'RETURN ON' : 'RETURN'),
+                height: 40,
+                child: ElevatedButton(
+                  onPressed: () => setState(() => _isReturnMode = !_isReturnMode),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _isReturnMode ? Colors.red : Colors.grey.shade300,
                     foregroundColor: _isReturnMode ? Colors.white : Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
                   ),
+                  child: Text(_isReturnMode ? 'RETURN ON' : 'RETURN', style: const TextStyle(fontSize: 12)),
                 ),
               ),
             ],
@@ -309,11 +348,7 @@ class _BillingScreenState extends State<BillingScreen> {
             Container(
               constraints: const BoxConstraints(maxHeight: 150),
               margin: const EdgeInsets.only(top: 4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(4),
-              ),
+              decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.grey.shade300)),
               child: ListView.builder(
                 shrinkWrap: true,
                 itemCount: _filteredProducts.length,
@@ -324,11 +359,8 @@ class _BillingScreenState extends State<BillingScreen> {
                     title: Text(p.name),
                     subtitle: Text('Rs ${p.salePrice} | Stock: ${p.stockQty}'),
                     onTap: () {
-                      // Agar return mode nahi hai to stock check karein
                       if (!_isReturnMode && p.stockQty <= 0) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Out of stock!')),
-                        );
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Out of stock!')));
                       } else {
                         _addProductToCart(p);
                       }
@@ -338,51 +370,64 @@ class _BillingScreenState extends State<BillingScreen> {
               ),
             ),
           
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           
-          // 3. CART ITEMS LIST
+          // Bill Items Table (Headers)
+          Container(
+            color: Colors.grey.shade200,
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+            child: const Row(
+              children: [
+                Expanded(flex: 3, child: Text('Product', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                Expanded(flex: 2, child: Text('Rate', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                Expanded(flex: 1, child: Text('Qty', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                Expanded(flex: 2, child: Text('Disc', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                Expanded(flex: 2, child: Text('Total', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+              ],
+            ),
+          ),
+
+          // Cart Items List
           Expanded(
             child: _cartItems.isEmpty
-                ? Center(
-                    child: Text(
-                      _isReturnMode ? 'RETURN MODE ON: Select product to return.' : 'No items in bill.',
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                  )
+                ? const Center(child: Text('No items added', style: TextStyle(color: Colors.grey)))
                 : ListView.builder(
                     itemCount: _cartItems.length,
                     itemBuilder: (context, index) {
                       final item = _cartItems[index];
                       final p = item['product'] as Product;
                       final qty = item['qty'] as int;
-                      final itemTotal = p.salePrice * qty;
-                      
+                      final disc = item['discount'] as double;
+                      final total = (p.salePrice - disc) * qty;
+
                       return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        child: ListTile(
-                          dense: true,
-                          title: Text(p.name),
-                          subtitle: Text('$qty x Rs ${p.salePrice} (Tap to edit price)'),
-                          onTap: () => _editPrice(index), // Price edit function
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
+                        margin: const EdgeInsets.symmetric(vertical: 2),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                          child: Row(
                             children: [
-                              Text(
-                                'Rs $itemTotal',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold, 
-                                  fontSize: 16,
-                                  color: itemTotal < 0 ? Colors.red : Colors.black,
-                                ),
+                              Expanded(flex: 3, child: Text(p.name, style: const TextStyle(fontSize: 12))),
+                              Expanded(
+                                flex: 2,
+                                child: InkWell(onTap: () => _editPrice(index), child: Text('${p.salePrice}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.blue, decoration: TextDecoration.underline))),
+                              ),
+                              Expanded(
+                                flex: 1,
+                                child: InkWell(onTap: () => _editQty(index), child: Text('$qty', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.blue, decoration: TextDecoration.underline, fontWeight: qty < 0 ? FontWeight.bold : FontWeight.normal))),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: InkWell(onTap: () => _editDiscount(index), child: Text('$disc', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.blue, decoration: TextDecoration.underline))),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text('$total', textAlign: TextAlign.right, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: total < 0 ? Colors.red : Colors.black)),
                               ),
                               IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                onPressed: () {
-                                  setState(() {
-                                    _cartItems.removeAt(index);
-                                    _calculateTotal();
-                                  });
-                                },
+                                icon: const Icon(Icons.delete, color: Colors.red, size: 16),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () { setState(() { _cartItems.removeAt(index); _calculateTotal(); }); },
                               ),
                             ],
                           ),
@@ -392,80 +437,86 @@ class _BillingScreenState extends State<BillingScreen> {
                   ),
           ),
           
-          // 4. BOTTOM CHECKOUT SECTION
+          // Bottom Checkout Section
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: _isReturnMode ? Colors.red.shade50 : Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: _isReturnMode ? Colors.red : Colors.blue),
             ),
             child: Column(
               children: [
+                // Payment Mode
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    const Text('Net Amount:', style: TextStyle(fontSize: 16)),
-                    Text(
-                      'Rs ${_grandTotal.toStringAsFixed(0)}', 
-                      style: TextStyle(
-                        fontSize: 20, 
-                        fontWeight: FontWeight.bold, 
-                        color: _grandTotal < 0 ? Colors.red : Colors.blue,
+                    Row(
+                      children: [
+                        Radio<String>(value: 'Cash', groupValue: _paymentMode, onChanged: (val) => setState(() => _paymentMode = val!)),
+                        const Text('Cash', style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Radio<String>(value: 'Credit', groupValue: _paymentMode, onChanged: (val) => setState(() => _paymentMode = val!)),
+                        const Text('Credit (Udhaar)', style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  ],
+                ),
+                const Divider(height: 4),
+                // Total & Received
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Net Total: Rs ${_grandTotal.toStringAsFixed(0)}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _grandTotal < 0 ? Colors.red : Colors.blue)),
+                          Text('Return: Rs $returnAmount', style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                    SizedBox(
+                      width: 100,
+                      height: 35,
+                      child: TextField(
+                        controller: _receivedAmountController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(hintText: 'Received', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 4)),
                       ),
                     ),
                   ],
                 ),
-                const Divider(),
+                const SizedBox(height: 4),
+                // Save & Hold Buttons
                 Row(
                   children: [
                     Expanded(
                       child: SizedBox(
-                        height: 40,
-                        child: TextField(
-                          controller: _receivedAmountController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Received',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                          ),
+                        height: 35,
+                        child: ElevatedButton(
+                          onPressed: _holdBill,
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                          child: const Text('HOLD', style: TextStyle(color: Colors.white)),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     Expanded(
-                      child: Container(
-                        height: 40,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'Return: Rs $returnAmount',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                      flex: 2,
+                      child: SizedBox(
+                        height: 35,
+                        child: ElevatedButton(
+                          onPressed: _cartItems.isEmpty ? null : () {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invoice Save logic coming next!')));
+                          },
+                          style: ElevatedButton.styleFrom(backgroundColor: _isReturnMode ? Colors.red : Colors.blue),
+                          child: const Text('SAVE INVOICE', style: TextStyle(color: Colors.white)),
                         ),
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  height: 45,
-                  child: ElevatedButton(
-                    onPressed: _cartItems.isEmpty ? null : () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Invoice Save ka function next step hai!')),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _isReturnMode ? Colors.red : Colors.blue,
-                    ),
-                    child: const Text('SAVE INVOICE', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-                  ),
                 ),
               ],
             ),
