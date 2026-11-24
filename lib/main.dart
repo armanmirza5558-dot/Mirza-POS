@@ -23,23 +23,16 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
-
-  @override
-  State<HomePage> createState() => _HomePageState();
-}
-
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   int _heldBillsCount = 0; 
 
+  // YAHAN LIST THEEK KI HAI
   static const List<Widget> _pages = <Widget>[
-    StockScreen(),
-    Center(child: Text('Ledger - Coming Soon')),
-    Center(child: Text('Expense - Coming Soon')),
-    Center(child: Text('Reports - Coming Soon')),
+    StockScreen(), // Index 0
+    Center(child: Text('Ledger - Coming Soon')), // Index 1
+    Center(child: Text('Expense - Coming Soon')), // Index 2
+    Center(child: Text('Reports - Coming Soon')), // Index 3
   ];
 
   @override
@@ -79,11 +72,29 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
+      // YAHAN INDEX - 1 KI TABDEELI HAI
       body: _selectedIndex == 0 
           ? BillingScreen(
               onBillHeld: _updateHeldBillsCount, 
               heldCount: _heldBillsCount,
             ) 
+          : _pages[_selectedIndex - 1],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: Colors.blue,
+        onTap: (index) => setState(() => _selectedIndex = index),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Billing'),
+          BottomNavigationBarItem(icon: Icon(Icons.inventory), label: 'Stock'),
+          BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: 'Ledger'),
+          BottomNavigationBarItem(icon: Icon(Icons.payments), label: 'Expense'),
+          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Reports'),
+        ],
+      ),
+    );
+  }
+} 
           : _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
